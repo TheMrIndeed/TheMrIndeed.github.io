@@ -44,13 +44,13 @@
 
 <script>
 	function myFunction(){
-    	var e = document.getElementById("a");
+    	var e = document.getElementById("crops");
         var x = e.options[e.selectedIndex].value;
         if(x=="1000"){
-        	document.getElementById("b").removeAttribute("value")
+        	document.getElementById("temp").removeAttribute("value")
         }
         else{
-        	document.getElementById("b").setAttribute("value",x);
+        	document.getElementById("temp").setAttribute("value",x);
         }
 	}
 </script>
@@ -62,7 +62,7 @@
         ThingSpeak Write API Key:<br>
     	<input type="password" name="api_key" required><br>
         New Overheating Temperature in Fahrenheit:<br>
-        <select id="a" onchange="myFunction()">
+        <select id="crops" onchange="myFunction()">
         	<option value="1000" selected> Other</option>
         	<option value="85"> Artichoke:85</option>
             	<option value="70"> Beets:70</option>
@@ -86,7 +86,7 @@
             	<option value="59"> Watercress:59</option>
             	<option value="70"> Zucchini:70</option>
         </select>
-    	<input type="number" placeholder="Other Temp Here" id="b" name="field1" autofocus><br><br>
+    	<input type="number" placeholder="Other Temp Here" id="temp" name="field1" autofocus><br><br>
         
     	<input type="submit" formtarget="iframe_a" value="Submit Normal">
         <input type="submit" formtarget="_blank" value="Submit New Window">
