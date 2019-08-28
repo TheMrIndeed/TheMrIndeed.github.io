@@ -1,134 +1,311 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Google Sheets API Quickstart</title>
-    <meta charset="utf-8" />
-  </head>
-  <body>
-    <p>Google Sheets API Quickstart</p>
+<head>
+	<title>Device Map</title>
+    
+    <meta charset="UTF-8">
+  	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  	<meta name="Device Map" content="Particle to Google Sheet to Open Street Map">
+  	<meta name="Austin Stokes" content="St.Thomas University">
+    
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css"
+   	integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+   	crossorigin="">
+    <!-- Make sure you put this AFTER Leaflet's CSS -->
+    <script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"
+	integrity="sha512-GffPMF3RvMeYyc1LWMHtK8EbPv0iNZ8/oTtHPx9/cc2ILxQ+u905qIwdpULaqDkyBKgOaB57QTMg7ztg8Jm2Og=="
+	crossorigin=""></script>
+	<script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+    
+    <style>
+		table, th, td {
+  		border: 1px solid black;
+  		border-collapse: collapse;
+		}
+	</style>
+</head>
+<body style="background-color:rgb(220,220,220);" onload="loadData()">
 
-    <!--Add buttons to initiate auth sequence and sign out-->
-    <button id="authorize_button" style="display: none;">Authorize</button>
-    <button id="signout_button" style="display: none;">Sign Out</button>
+<h1>Device Map</h1>
+<div id="map" style="width: 600px; height: 400px; position: relative;"></div>
 
-    <pre id="content" style="white-space: pre-wrap;"></pre>
+<iframe name='onOffFrame' height='50' width='596'></iframe>
+<br/>
+<button onclick="setLoadDataInt(1)">Refresh Data Every Minute</button>
+<button onclick="setLoadDataInt(0)">Stop Refreshing Data</button>
+<br/>
+<p id='dataInt'>Not Refreshing Data</p>
 
-    <script type="text/javascript">
-      // Client ID and API key from the Developer Console
-      var CLIENT_ID = '83110141277-avujcercf2827mpj98hnvel4lvcj5m3p.apps.googleusercontent.com';
-      var API_KEY = 'AIzaSyBtJ3lfNJjLbsHYGGOs0Nylj_8vU99dbyk';
+<p><b>Last Recieved Data From Each Unique Device</b></p>
+<p>Devices will only recieve the ForceTurnOff when it next wakes up, this may take up to an hour</p>
 
-      // Array of API discovery doc URLs for APIs used by the quickstart
-      var DISCOVERY_DOCS = ["https://sheets.googleapis.com/$discovery/rest?version=v4"];
+<table class="table table bordered table-striped" id="uniqueTable1">
+	<thead>
+		<tr>
+        	<th>UniqueDeviceID</th>
+          	<th>Latitude</th>
+          	<th>Longitude</th>
+            <th>StateOfCharge</th>
+          	<th>AwakeState</th>
+          	<th>AliveState</th>
+          	<th>Timestamp</th>
+            <th>ForceTurnOff</th>
+		</tr>
+	</thead>
+	<tbody id="uniqueTableBody1">
+	</tbody>
+</table>
 
-      // Authorization scopes required by the API; multiple scopes can be
-      // included, separated by spaces.
-      var SCOPES = "https://www.googleapis.com/auth/spreadsheets.readonly";
+<table class="table table bordered table-striped" id="uniqueTable2" style="display: none">
+	<thead>
+		<tr>
+        	<th>UniqueDeviceID</th>
+          	<th>Latitude</th>
+          	<th>Longitude</th>
+            <th>StateOfCharge</th>
+          	<th>AwakeState</th>
+          	<th>AliveState</th>
+          	<th>Timestamp</th>
+            <th>ForceTurnOff</th>
+		</tr>
+	</thead>
+	<tbody id="uniqueTableBody2">
+	</tbody>
+</table>
 
-      var authorizeButton = document.getElementById('authorize_button');
-      var signoutButton = document.getElementById('signout_button');
+<br/>
+<p id='demo'>All Data For All Devices</p>
 
-      /**
-       *  On load, called to load the auth2 library and API client library.
-       */
-      function handleClientLoad() {
-        gapi.load('client:auth2', initClient);
+<table class="table table bordered table-striped" id="fullTable1">
+	<thead>
+		<tr>
+        	<th>DeviceID</th>
+          	<th>Latitude</th>
+          	<th>Longitude</th>
+            <th>StateOfCharge</th>
+          	<th>AwakeState</th>
+          	<th>AliveState</th>
+          	<th>Timestamp</th>
+		</tr>
+	</thead>
+	<tbody id="fullTableBody1">
+	</tbody>
+</table>
+
+<table class="table table bordered table-striped" id="fullTable2" style="display: none">
+	<thead>
+		<tr>
+        	<th>DeviceID</th>
+          	<th>Latitude</th>
+          	<th>Longitude</th>
+            <th>StateOfCharge</th>
+          	<th>AwakeState</th>
+          	<th>AliveState</th>
+          	<th>Timestamp</th>
+		</tr>
+	</thead>
+	<tbody id="fullTableBody2">
+	</tbody>
+</table>
+
+<script>
+//Adds function to get active overlay
+L.Control.Layers.include({
+  getOverlays: function() {
+    // create hash to hold all layers
+    var control, layers;
+    layers = {};
+    control = this;
+
+    // loop thru all layers in control
+    control._layers.forEach(function(obj) {
+      var layerName;
+
+      // check if layer is an overlay
+      if (obj.overlay) {
+        // get name of overlay
+        layerName = obj.name;
+        // store whether it's present on the map or not
+        return layers[layerName] = control._map.hasLayer(obj.layer);
       }
+    });
 
-      /**
-       *  Initializes the API client library and sets up sign-in state
-       *  listeners.
-       */
-      function initClient() {
-        gapi.client.init({
-          apiKey: API_KEY,
-          clientId: CLIENT_ID,
-          discoveryDocs: DISCOVERY_DOCS,
-          scope: SCOPES
-        }).then(function () {
-          // Listen for sign-in state changes.
-          gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
+    return layers;
+  }
+});
+</script>
 
-          // Handle the initial sign-in state.
-          updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
-          authorizeButton.onclick = handleAuthClick;
-          signoutButton.onclick = handleSignoutClick;
-        }, function(error) {
-          appendPre(JSON.stringify(error, null, 2));
-        });
-      }
+<script>	
+var mbAttr = 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, ' +
+	'<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+	'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>';
+var mbUrl = 'https://api.mapbox.com/styles/v1/mapbox/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoidGhlbXJpbmRlZWQiLCJhIjoiY2p6OGxkamFrMThwMTNncWluZDY0enpzaCJ9.njj7RFETPM5-X_DYEuF_Pw';
+	
+var streets  = L.tileLayer(mbUrl, {id: 'streets-v9',   attribution: mbAttr});
+var satellite = L.tileLayer(mbUrl, {id: 'satellite-streets-v9', attribution: mbAttr});
+var grayscale = L.tileLayer(mbUrl, {id: 'light-v9', attribution: mbAttr});
 
-      /**
-       *  Called when the signed in status changes, to update the UI
-       *  appropriately. After a sign-in, the API is called.
-       */
-      function updateSigninStatus(isSignedIn) {
-        if (isSignedIn) {
-          authorizeButton.style.display = 'none';
-          signoutButton.style.display = 'block';
-          listMajors();
-        } else {
-          authorizeButton.style.display = 'block';
-          signoutButton.style.display = 'none';
-        }
-      }
+var map = L.map('map', {
+	center: [44.958845, -93.169220],
+	zoom: 5,
+	layers: [streets]
+});
 
-      /**
-       *  Sign in the user upon button click.
-       */
-      function handleAuthClick(event) {
-        gapi.auth2.getAuthInstance().signIn();
-      }
+var baseLayers = {
+	"Streets": streets,
+	"Satellite": satellite,
+    "Grayscale": grayscale
+};
+    
+var overlayLayers = {};
+var controlLayer = new L.Control.Layers(baseLayers,overlayLayers,sortLayers=true);
+controlLayer.addTo(map); 
 
-      /**
-       *  Sign out the user upon button click.
-       */
-      function handleSignoutClick(event) {
-        gapi.auth2.getAuthInstance().signOut();
-      }
+function getColor(id) {
+  var color = '#';
+  color += id % 1000000;
+  return color;
+}
 
-      /**
-       * Append a pre element to the body containing the given message
-       * as its text node. Used to display the results of the API call.
-       *
-       * @param {string} message Text to be placed in pre element.
-       */
-      function appendPre(message) {
-        var pre = document.getElementById('content');
-        var textContent = document.createTextNode(message + '\n');
-        pre.appendChild(textContent);
-      }
+var DeviceID = [];
+var Latitude = [];
+var Longitude = [];
+var StateOfCharge = [];
+var AwakeState = [];
+var AliveState = [];
+var Timestamp = [];
+  
+var uniqueDevice = [];
+var uniqueDeviceName = [];
+var uniqueActiveDeviceName = [];
+var groups = [];
 
-      /**
-       * Print the names and majors of students in a sample spreadsheet:
-       * https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
-       */
-      function listMajors() {
-        gapi.client.sheets.spreadsheets.values.get({
-          spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
-          range: 'Class Data!A2:E',
-        }).then(function(response) {
-          var range = response.result;
-          if (range.values.length > 0) {
-            appendPre('Name, Major:');
-            for (i = 0; i < range.values.length; i++) {
-              var row = range.values[i];
-              // Print columns A and E, which correspond to indices 0 and 4.
-              appendPre(row[0] + ', ' + row[4]);
-            }
-          } else {
-            appendPre('No data found.');
+var interval;
+
+function loadData(){
+	uniqueActiveDeviceName = [];
+    
+    var activeOverlayLayers = controlLayer.getOverlays();
+	for (var overlayId in activeOverlayLayers) {
+    	if(activeOverlayLayers[overlayId]){
+        	uniqueActiveDeviceName.push(overlayId);
+       	}
+	}
+        
+	var i;
+	for (i = 0; i < groups.length; i++) {
+    	groups[i].remove();
+        controlLayer.removeLayer(groups[i]);
+    }
+    
+	DeviceID = [];
+	Latitude = [];
+	Longitude = [];
+	StateOfCharge = [];
+	AwakeState = [];
+	AliveState = [];
+	Timestamp = [];
+  
+	uniqueDevice = [];
+	uniqueDeviceName = [];
+	groups = [];
+    
+    
+	document.getElementById('fullTableBody2').innerHTML = ('');
+    
+    document.getElementById('uniqueTableBody2').innerHTML = ('');
+    
+  $.getJSON("https://spreadsheets.google.com/feeds/list/1vAugKc-t0__JrNlRxwP4wtqenw6cwAJxPypNi8Eugu8/od6/public/values?alt=json", function (data) {
+
+      var sheetData = data.feed.entry;
+
+      var i;
+      for (i = 0; i < sheetData.length; i++) {
+          DeviceID[i] = data.feed.entry[i]['gsx$deviceid']['$t'];
+          Latitude[i] = data.feed.entry[i]['gsx$latitude']['$t'];
+          Longitude[i] = data.feed.entry[i]['gsx$longitude']['$t'];
+          StateOfCharge[i] = data.feed.entry[i]['gsx$stateofcharge']['$t'];
+          AwakeState[i] = data.feed.entry[i]['gsx$awakestate']['$t'];
+          AliveState[i] = data.feed.entry[i]['gsx$alivestate']['$t'];
+          Timestamp[i] = data.feed.entry[i]['gsx$timestamp']['$t'];
+
+          document.getElementById('fullTableBody2').innerHTML += ('<tr>'+'<td>'+DeviceID[i]+'</td>'+'<td>'+Latitude[i]+'</td>'+'<td>'+Longitude[i]+'</td>'+'<td>'+StateOfCharge[i]+'</td>'+'<td>'+AwakeState[i]+'</td>'+'<td>'+AliveState[i]+'</td>'+'<td>'+Timestamp[i]+'</td>'+'</tr>');
+
+          var isUnique = 1;
+          var j;
+          for (j = 0; j < uniqueDevice.length; j++){
+              if(uniqueDevice[j]==DeviceID[i]){
+                  isUnique = 0;
+              }
           }
-        }, function(response) {
-          appendPre('Error: ' + response.result.error.message);
-        });
+          if(isUnique){
+              uniqueDevice.push(DeviceID[i]);
+              uniqueDeviceName.push(String(DeviceID[i]));
+          }
       }
+      getMapPoints();
+      addLayerToMap();
+      switchData();
+  });
+}
+  
+function getMapPoints(){
+	var i;
+	for (i = 0; i < uniqueDevice.length; i++) {
+		groups[i] = L.layerGroup();
+		var j;
+        var k;
+		var latlng = [];
+		for (j = 0; j < DeviceID.length; j++) {
+			if(uniqueDevice[i]==DeviceID[j]){
+				latlng.push(L.latLng(Latitude[j],Longitude[j]));
+                k=j;
+			}
+		}
+		L.polyline(latlng,{color: getColor(uniqueDevice[i])}).addTo(groups[i]);
+		L.marker(latlng[latlng.length-1]).bindPopup(
+        "Last Known Location<br />DeviceID: "+ DeviceID[k]
+        + "<br />Latitude: "+ Latitude[k]
+        + "<br />Longitude: "+ Longitude[k]
+        + "<br />Taken at: "+ Timestamp[k]).addTo(groups[i]);
+        
+        document.getElementById('uniqueTableBody2').innerHTML += ('<tr>'+'<td>'+DeviceID[k]+'</td>'+'<td>'+Latitude[k]+'</td>'+'<td>'+Longitude[k]+'</td>'+'<td>'+StateOfCharge[k]+'</td>'+'<td>'+AwakeState[k]+'</td>'+'<td>'+AliveState[k]+'</td>'+'<td>'+Timestamp[k]+'</td>'+'<td>'+
+        '<form action="https://api.particle.io/v1/products/8957/devices/'+DeviceID[k]+'/kill?access_token=260be15cb028a6a4cfc004df5215c07b14335d7e" method="POST"><input type="radio" name="arg" value="1">Turn On<input type="radio" name="arg" value="0">Turn Off<input type="submit" formtarget="onOffFrame" value="Submit"></form>'
+        +'</td>'+'</tr>');
+	}
+}
 
-    </script>
+function setLoadDataInt(reload){
+	if(reload){
+		document.getElementById('dataInt').innerHTML = ('Refreshing Data Every Minute');
+		interval = setInterval(loadData,60000);
+    }
+    else{
+    	document.getElementById('dataInt').innerHTML = ('Not Refreshing Data');
+		clearTimeout(interval);
+    }
+}
 
-    <script async defer src="https://apis.google.com/js/api.js"
-      onload="this.onload=function(){};handleClientLoad()"
-      onreadystatechange="if (this.readyState === 'complete') this.onload()">
-    </script>
-  </body>
+function addLayerToMap(){
+	var overlayLayers = {};
+ 
+    var i;
+    for (i = 0; i < uniqueDevice.length; i++) {
+    	controlLayer.addOverlay(groups[i],uniqueDeviceName[i]);
+        var j;
+        for (j = 0; j < uniqueActiveDeviceName.length; j++) {
+        	if(uniqueDeviceName[i] == uniqueActiveDeviceName[j]){
+            	groups[i].addTo(map);
+            }
+    	}
+    }
+}
+
+function switchData(){
+	document.getElementById('fullTableBody1').innerHTML = document.getElementById('fullTableBody2').innerHTML;
+    document.getElementById('uniqueTableBody1').innerHTML = document.getElementById('uniqueTableBody2').innerHTML;
+}
+</script>
+
+</body>
 </html>
